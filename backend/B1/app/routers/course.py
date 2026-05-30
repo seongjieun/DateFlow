@@ -48,16 +48,60 @@ async def fetch_places(category: str, area: str) -> list[dict]:
     except Exception:
         return []
 
-def calc_walk_minutes(lat1, lon1, lat2, lon2):
+import httpx
+
+async def calc_transport_minutes(lat1, lon1, lat2, lon2):
+    """카카오 모빌리티 API로 자동차/도보 이동 시간 계산"""
     if not all([lat1, lon1, lat2, lon2]):
-        return None
-    R = 6371000
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlam/2)**2
-    distance = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return round(distance / 67)
+        return None, None
+    
+    KAKAO_KEY = os.getenv("KAKAO_REST_API_KEY")
+    headers = {"Authorization": f"KakaoAK {KAKAO_KEY}"}
+
+    # 자동차
+    car_minutes = None
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://apis-navi.kakaomobility.com/v1/directions",
+                headers=headers,
+                params={
+                    "origin": f"{lon1},{lat1}",
+                    "destination": f"{lon2},{lat2}",
+                    "priority": "RECOMMEND"
+                }
+            )
+            data = resp.json()
+            car_minutes = round(data["routes"][0]["summary"]["duration"] / 60)
+    except:
+        pass
+
+    # 도보
+    walk_minutes = None
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://apis-navi.kakaomobility.com/v1/directions",
+                headers=headers,
+                params={
+                    "origin": f"{lon1},{lat1}",
+                    "destination": f"{lon2},{lat2}",
+                    "priority": "WALK"
+                }
+            )
+            data = resp.json()
+            walk_minutes = round(data["routes"][0]["summary"]["duration"] / 60)
+    except:
+        # 폴백: 직선거리
+        R = 6371000
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlam = math.radians(lon2 - lon1)
+        a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlam/2)**2
+        distance = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+        walk_minutes = round(distance / 67)
+
+    return car_minutes, walk_minutes
 
 def calc_satisfaction(tags: list, category: str) -> int:
     """취향 태그와 장소 카테고리 매칭해서 만족도 계산"""
@@ -159,9 +203,14 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
                     satisfaction_a=calc_satisfaction(tags_a, event.get("category", "기타")),
                     satisfaction_b=calc_satisfaction(tags_b, event.get("category", "기타")),
                 ))
-            # 도보 이동시간 (AI 장소는 좌표 없으므로 기본값)
+            # 도보 이동시간
             for i in range(len(ai_places) - 1):
-                ai_places[i].walk_minutes_to_next = 10
+                car_min, walk_min = await calc_transport_minutes(
+                    ai_places[i].latitude, ai_places[i].longitude,
+                    ai_places[i+1].latitude, ai_places[i+1].longitude,
+                )
+                ai_places[i].walk_minutes_to_next = walk_min if walk_min else 10
+                ai_places[i].car_minutes_to_next = car_min
     except Exception as e:
         print(f"AI 호출 실패, B2 폴백: {e}")
 
@@ -184,42 +233,57 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
         restaurant_data = restaurants[0] if restaurants else None
         bar_data = bars[0] if bars else None
 
-        def make_place(data, fallback_name, category, time, price):
-            if data:
-                return PlaceItem(
-                    name=data["name"],
-                    category=category,
-                    region=req.region,
-                    time=time,
-                    price=price,
-                    is_open=True,
-                    latitude=float(data["latitude"]) if data.get("latitude") else None,
-                    longitude=float(data["longitude"]) if data.get("longitude") else None,
-                    satisfaction_a=calc_satisfaction(tags_a, category),
-                    satisfaction_b=calc_satisfaction(tags_b, category),
-                )
+        async def make_place(data, fallback_name, category, time, price):
+            name = data["name"] if data else fallback_name
+            lat = float(data["latitude"]) if data and data.get("latitude") else None
+            lon = float(data["longitude"]) if data and data.get("longitude") else None
+
+            # 좌표 없으면 카카오 Local API로 검색
+            if not lat or not lon:
+                try:
+                    KAKAO_KEY = os.getenv("KAKAO_REST_API_KEY")
+                    async with httpx.AsyncClient() as client:
+                        resp = await client.get(
+                            "https://dapi.kakao.com/v2/local/search/keyword.json",
+                            headers={"Authorization": f"KakaoAK {KAKAO_KEY}"},
+                            params={"query": f"{req.region} {name}", "size": 1}
+                        )
+                        result = resp.json()
+                        if result.get("documents"):
+                            doc = result["documents"][0]
+                            lat = float(doc["y"])
+                            print(f">>> 좌표 조회 성공: {name} → {lat}, {lon}")
+                            lon = float(doc["x"])
+                except:
+                    print(f">>> 좌표 조회 실패: {name}")
+                    pass
+
             return PlaceItem(
-                name=fallback_name,
+                name=name,
                 category=category,
                 region=req.region,
                 time=time,
                 price=price,
                 is_open=True,
+                latitude=lat,
+                longitude=lon,
                 satisfaction_a=calc_satisfaction(tags_a, category),
                 satisfaction_b=calc_satisfaction(tags_b, category),
             )
 
         place_list = [
-            make_place(cafe_data, f"{req.region} 카페", "카페", "13:00", cafe_budget),
-            make_place(restaurant_data, f"{req.region} 레스토랑", "식당", "18:00", dinner_budget),
-            make_place(bar_data, f"{req.region} 바", "바", "20:00", bar_budget),
+            await make_place(cafe_data, f"{req.region} 카페", "카페", "13:00", cafe_budget),
+            await make_place(restaurant_data, f"{req.region} 레스토랑", "식당", "18:00", dinner_budget),
+            await make_place(bar_data, f"{req.region} 바", "바", "20:00", bar_budget),
         ]
 
         for i in range(len(place_list) - 1):
-            place_list[i].walk_minutes_to_next = calc_walk_minutes(
+            car_min, walk_min = await calc_transport_minutes(
                 place_list[i].latitude, place_list[i].longitude,
                 place_list[i+1].latitude, place_list[i+1].longitude,
             )
+            place_list[i].walk_minutes_to_next = walk_min
+            place_list[i].car_minutes_to_next = car_min
         title = f"{mood} 코스 ({weather['description']})"
 
     course = CourseItem(

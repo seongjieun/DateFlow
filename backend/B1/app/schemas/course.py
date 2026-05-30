@@ -27,6 +27,7 @@ class PlaceItem(BaseModel):
     latitude:  Optional[float] = None
     longitude: Optional[float] = None
     walk_minutes_to_next: Optional[int] = None
+    car_minutes_to_next: Optional[int] = None
     satisfaction_a: Optional[int] = None
     satisfaction_b: Optional[int] = None
 

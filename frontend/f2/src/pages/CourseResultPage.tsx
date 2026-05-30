@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import type { CoursePlace, CourseResult, WeatherType } from "../types/course";
+import type {
+  CoursePlace,
+  CourseResult,
+  BackendPlace,
+  WeatherType,
+} from "../types/course";
 import { mockCourseData } from "../mocks/courseData";
 import PreferenceIntersection from "../components/PreferenceIntersection";
 import CourseTimeline from "../components/CourseTimeline";
@@ -19,7 +24,10 @@ function mapCategory(cat: string): CoursePlace["category"] {
   return "activity";
 }
 
-function adaptPlaces(backendPlaces: any[], budget: number): CoursePlace[] {
+function adaptPlaces(
+  backendPlaces: BackendPlace[],
+  budget: number,
+): CoursePlace[] {
   const fallbackTimes = ["13:00", "15:30", "18:00", "20:00"];
   return backendPlaces.map((p: any, i: number) => {
     const cost = p.price || 0;
@@ -39,8 +47,13 @@ function adaptPlaces(backendPlaces: any[], budget: number): CoursePlace[] {
       recommendedMenus: [],
       reservationAvailable: false,
       relationKeywords: [],
-      travelTimeToNext: 10,
-      travelModeToNext: "walk" as const,
+      travelTimeToNext:
+        p.walk_minutes_to_next ?? p.car_minutes_to_next ?? undefined,
+      travelModeToNext: p.walk_minutes_to_next
+        ? "walk"
+        : p.car_minutes_to_next
+          ? "car"
+          : undefined,
     };
   });
 }
@@ -59,6 +72,7 @@ export default function CourseResultPage() {
       // 백엔드 응답 바로 적용
       if (stateData.courses?.[0]?.places) {
         const budget = stateData.budget_max || 100000;
+        console.log("places raw:", stateData.courses[0].places);
         setPlaces(adaptPlaces(stateData.courses[0].places, budget));
       }
       setCourseData((prev) => ({
@@ -122,6 +136,7 @@ export default function CourseResultPage() {
       .then((r) => r.json())
       .then((data) => {
         const backendPlaces = data.courses?.[0]?.places || [];
+        console.log("places raw:", backendPlaces);
         const adapted = adaptPlaces(backendPlaces, budget);
         if (adapted.length > 0) setPlaces(adapted);
       })
