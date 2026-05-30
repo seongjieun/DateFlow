@@ -7,10 +7,13 @@ class CourseRequest(BaseModel):
     region:        str
     lat:           float
     lon:           float
-    start_time:    str
-    end_time:      str
-    budget:        int
+    budget_min:    int = 0
+    budget_max:    int = 100000
     weather:       Optional[str] = None
+    date:          Optional[str] = None
+    temp:          Optional[float] = None
+    tags_m:        List[str] = []
+    tags_f:        List[str] = []
     natural_input: Optional[str] = None
 
 # 장소 정보
@@ -24,6 +27,8 @@ class PlaceItem(BaseModel):
     latitude:  Optional[float] = None
     longitude: Optional[float] = None
     walk_minutes_to_next: Optional[int] = None
+    satisfaction_a: Optional[int] = None
+    satisfaction_b: Optional[int] = None
 
 # 코스 하나
 class CourseItem(BaseModel):
@@ -33,7 +38,8 @@ class CourseItem(BaseModel):
 
 # 코스 생성 응답
 class CourseResponse(BaseModel):
-    course_id: str
-    user_id:   str
-    region:    str
-    courses:   List[CourseItem]
+    course_id:  str
+    user_id:    str
+    region:     str
+    budget_max: int = 100000  
+    courses:    List[CourseItem]
