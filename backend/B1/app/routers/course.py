@@ -15,7 +15,7 @@ AI_PATH = str(Path.home() / "DateFlow/ai")
 sys.path.insert(0, AI_PATH)
 from dotenv import load_dotenv
 import os
-KAKAO_KEY = os.getenv("KAKAO_REST_API_KEY", "61911f38ad82b9b4fc216af8cdb6a5e5")
+KAKAO_KEY = os.getenv("KAKAO_REST_API_KEY", "")  # .env에 KAKAO_REST_API_KEY 설정 필요
 load_dotenv(Path(AI_PATH) / ".env")
 
 router = APIRouter()
