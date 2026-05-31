@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CoursePlace } from '../types/course';
+import { loadKakaoSDK } from '../utils/kakaoSDK';
 
 interface Props {
     places: CoursePlace[];
@@ -31,33 +32,25 @@ export default function KakaoMap({ places, selectedPlace, onSelectPlace }: Props
     const mapRef       = useRef<KakaoMaps | null>(null);
 
     // SDK가 이미 로드된 경우 true로 초기화
-    const [loaded, setLoaded] = useState(() => !!(window.kakao?.maps));
+    const [loaded,   setLoaded]   = useState(() => !!(window.kakao?.maps?.Map));
+    const [errMsg,   setErrMsg]   = useState<string | null>(null);
 
     const apiKey = import.meta.env.VITE_KAKAO_MAPS_API_KEY as string | undefined;
 
-    // SDK 로드 — 아직 로드되지 않은 경우에만 실행
+    // 공통 SDK 로더 사용
     useEffect(() => {
-        if (!apiKey || loaded) return;
-
-        const existing = document.getElementById('kakao-maps-sdk');
-        if (existing) {
-            existing.addEventListener('load', () => setLoaded(true));
-            return;
-        }
-
-        const script = document.createElement('script');
-        script.id  = 'kakao-maps-sdk';
-        script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&autoload=false`;
-        script.onload = () => window.kakao.maps.load(() => setLoaded(true));
-        document.head.appendChild(script);
-    }, [apiKey, loaded]);
+        if (loaded) return;
+        loadKakaoSDK()
+            .then(() => setLoaded(true))
+            .catch((e: Error) => setErrMsg(e?.message || "SDK 로드 실패"));
+    }, [loaded]);
 
     // 지도 초기화 — SDK 로드 완료 후 1회 실행
     useEffect(() => {
         if (!loaded || !containerRef.current || mapRef.current) return;
 
         const center = places.length > 0
-            ? new window.kakao.maps.LatLng(places[0].lat, places[0].lng)
+            ? new window.kakao.maps.LatLng(places[0].lat, places[0].lon)
             : new window.kakao.maps.LatLng(37.5665, 126.9780);
 
         mapRef.current = new window.kakao.maps.Map(containerRef.current, { center, level: 4 });
@@ -72,7 +65,7 @@ export default function KakaoMap({ places, selectedPlace, onSelectPlace }: Props
         const overlays: KakaoMaps[] = [];
 
         places.forEach((place, idx) => {
-            const pos        = new LatLng(place.lat, place.lng);
+            const pos        = new LatLng(place.lat, place.lon);
             const isSelected = selectedPlace?.name === place.name;
             const color      = CATEGORY_COLOR[place.category] ?? '#B89CE0';
 
@@ -107,7 +100,7 @@ export default function KakaoMap({ places, selectedPlace, onSelectPlace }: Props
 
         // 동선 연결 폴리라인
         const polyline = new Polyline({
-            path: places.map(p => new LatLng(p.lat, p.lng)),
+            path: places.map(p => new LatLng(p.lat, p.lon)),
             strokeWeight: 2,
             strokeColor: '#b8a9d9',
             strokeOpacity: 0.8,
@@ -121,7 +114,7 @@ export default function KakaoMap({ places, selectedPlace, onSelectPlace }: Props
         };
     }, [loaded, places, selectedPlace, onSelectPlace]);
 
-    const showPlaceholder = !apiKey || !loaded;
+    const showPlaceholder = !apiKey || !loaded || !!errMsg;
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '280px' }}>
@@ -150,7 +143,13 @@ export default function KakaoMap({ places, selectedPlace, onSelectPlace }: Props
                 }}>
                     {!apiKey
                         ? '.env.local에 VITE_KAKAO_MAPS_API_KEY를 설정해 주세요'
-                        : '지도 불러오는 중...'}
+                        : errMsg
+                            ? <span style={{ textAlign: 'center', lineHeight: 1.6 }}>
+                                ⚠ 카카오 개발자 콘솔에서<br />
+                                <strong>플랫폼 → Web → 사이트 도메인</strong>에<br />
+                                <code>http://localhost:5173</code> 등록 필요
+                              </span>
+                            : '지도 불러오는 중...'}
                 </div>
             )}
         </div>

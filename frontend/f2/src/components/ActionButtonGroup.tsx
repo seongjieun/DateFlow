@@ -2,13 +2,14 @@ import type { CoursePlace } from "../types/course";
 
 interface Props {
     place: CoursePlace;
+    hideNavigation?: boolean;
 }
 
-export default function ActionButtonGroup({ place }: Props) {
+export default function ActionButtonGroup({ place, hideNavigation = false }: Props) {
 
     const handleNavigation = () => {
         window.open(
-            `https://map.kakao.com/link/to/${place.name},${place.lat},${place.lng}`,
+            `https://map.kakao.com/link/to/${place.name},${place.lat},${place.lon}`,
             '_blank'
         );
     };
@@ -56,9 +57,11 @@ export default function ActionButtonGroup({ place }: Props) {
 
     return (
         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-            <button onClick={handleNavigation} style={base}>
-                길찾기
-            </button>
+            {!hideNavigation && (
+                <button onClick={handleNavigation} style={base}>
+                    길찾기
+                </button>
+            )}
 
             <button onClick={handleInstagram} style={base}>
                 인스타<br />검색

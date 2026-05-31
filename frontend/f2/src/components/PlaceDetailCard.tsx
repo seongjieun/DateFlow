@@ -1,6 +1,5 @@
 import type { CoursePlace } from "../types/course";
 import CrowdChart from "./CrowdChart";
-import ActionButtonGroup from "./ActionButtonGroup";
 import PlaceActionButtonGroup from "./PlaceActionButtonGroup";
 import { mockCrowdData, mockReviews } from "../mocks/courseData";
 import { formatDaysAgo } from "../utils/formatDaysAgo";
@@ -265,8 +264,6 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                 </div>
             )}
 
-            {/* 액션 버튼 */}
-            <ActionButtonGroup place={place} />
         </div>
     );
 }

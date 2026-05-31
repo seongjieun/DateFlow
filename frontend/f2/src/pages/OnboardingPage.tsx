@@ -1,29 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { C } from "../constants/theme";
+import { loadKakaoSDK } from "../utils/kakaoSDK";
 
-declare var kakao: any;
+declare let kakao: any;
 
 const API_BASE    = import.meta.env.VITE_API_URL           || "http://localhost:8000";
 const KAKAO_JS_KEY = import.meta.env.VITE_KAKAO_MAPS_API_KEY || "";
-
-// ── 카카오 Maps SDK ──────────────────────────────────────
-let _sdkPromise: Promise<void> | null = null;
-function loadKakaoSDK() {
-  if (_sdkPromise) return _sdkPromise;
-  if (window.kakao?.maps?.services) return (_sdkPromise = Promise.resolve());
-  _sdkPromise = new Promise((resolve, reject) => {
-    const prev = document.getElementById("kakao-maps-sdk");
-    if (prev) { prev.addEventListener("load", () => kakao.maps.load(resolve)); return; }
-    const s   = document.createElement("script");
-    s.id      = "kakao-maps-sdk";
-    s.src     = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false`;
-    s.onload  = () => kakao.maps.load(resolve);
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-  return _sdkPromise;
-}
 
 async function searchKakaoPlaces(query: string) {
   if (!KAKAO_JS_KEY || !query.trim()) return [];
@@ -150,18 +134,7 @@ const snapToBudgetIdx = (rawValue: string | number) => {
   return bestIdx;
 };
 
-// ── 디자인 시스템 ──────────────────────────────────────────
-const C = {
-  bg:"#F5F3FB", card:"#FFFFFF", cardBorder:"#E8E4F4",
-  main:"#B8A9D9", mainDim:"#EAE5F5",
-  point:"#E8A0B4", pointDim:"#FCE8EE",
-  sub:"#D4849A", sky:"#A8C4E0", skyDim:"#DFF0F9",
-  text:"#3D3257", textDim:"#7B6FA0", textMuted:"#B0A8CC",
-  inputBg:"#F0EDF9", inputBorder:"#D8D0EE",
-  error:"#E87070", errorBg:"#FDE8E8",
-  warn:"#D4900A", warnBg:"#FFF6E0",
-  green:"#388E3C", greenBg:"#E8F5E9",
-};
+// ── 온보딩 전용 스타일 ────────────────────────────────────
 const GS = `
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
   @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
@@ -537,13 +510,6 @@ function CalendarPicker({ value, onChange }: { value: string; onChange: (v: stri
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  useEffect(() => {
-    if (value) {
-      const d = new Date(value + "T00:00:00");
-      setView({ year: d.getFullYear(), month: d.getMonth() });
-    }
-  }, [value]);
-
   const { year: vy, month: vm } = view;
   const prevMonth = () => setView(v => v.month === 0  ? { year:v.year-1, month:11 } : { ...v, month:v.month-1 });
   const nextMonth = () => setView(v => v.month === 11 ? { year:v.year+1, month:0  } : { ...v, month:v.month+1 });
@@ -688,7 +654,7 @@ export default function OnboardingPage() {
   const [apiError,    setApiError]    = useState<string | null>(null);
   const [isMobile,    setIsMobile]    = useState(window.innerWidth <= 480);
 
-  const sessionRef = useRef(`df_${Date.now()}`);
+  const [sessionId] = useState(() => `df_${Date.now()}`);
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 480);
@@ -706,11 +672,14 @@ export default function OnboardingPage() {
   const hasBudgetOverlap = budgetOverlapMin <= budgetOverlapMax;
 
   useEffect(() => {
-    if (!region?.name) { setWxPreview(null); setWxLoading(false); return; }
     let cancelled = false;
-    setWxPreview(null);
-    setWxLoading(true);
     const doFetch = async () => {
+      if (!region?.name) {
+        setWxPreview(null);
+        setWxLoading(false);
+        return;
+      }
+      setWxLoading(true);
       try {
         const wx = region.lat
           ? await fetchWeatherByCoords(region.lat, region.lon!, region.name, dateStr)
@@ -751,7 +720,7 @@ export default function OnboardingPage() {
     setWeather({ ...weatherObj, cityName });
 
     setLoadingMsg(LOADING_STEPS[2]);
-    const sid       = sessionRef.current;
+    const sid       = sessionId;
     const rawBudget = hasBudgetOverlap ? BUDGET_VALUES[budgetOverlapMin] : BUDGET_VALUES[budgetMaxA];
     const budget    = rawBudget === Infinity ? 999999 : rawBudget;
     let backendOk   = false;
@@ -801,13 +770,17 @@ export default function OnboardingPage() {
       windSpeed: String(weatherObj.windSpeed ?? ""),
       pop:       String(weatherObj.pop ?? ""),
       skyDesc:   weatherObj.skyDesc || "",
-      tagsA:     tagsA.join(","),
-      tagsB:     tagsB.join(","),
-      budget:    String(budget),
+      tagsA:      tagsA.join(","),
+      tagsB:      tagsB.join(","),
+      budget:     String(budget),
+      budgetMinA: String(BUDGET_VALUES[budgetMinA] === Infinity ? 999999 : BUDGET_VALUES[budgetMinA]),
+      budgetMaxA: String(BUDGET_VALUES[budgetMaxA] === Infinity ? 999999 : BUDGET_VALUES[budgetMaxA]),
+      budgetMinB: String(BUDGET_VALUES[budgetMinB] === Infinity ? 999999 : BUDGET_VALUES[budgetMinB]),
+      budgetMaxB: String(BUDGET_VALUES[budgetMaxB] === Infinity ? 999999 : BUDGET_VALUES[budgetMaxB]),
     });
     setLoadingMsg("결과 페이지로 이동합니다 ✦");
     await new Promise(r => setTimeout(r, 700));
-    navigate('/result?' + urlParams.toString());
+    navigate('/events?' + urlParams.toString());
   };
 
   const reset = () => {
@@ -897,7 +870,10 @@ export default function OnboardingPage() {
         <ProgressBar step={2} />
         <div style={{ fontSize:11, color:C.main, marginBottom:10, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600 }}>Step 2 / 4 · A님</div>
         <h2 className="df-step-title" style={{ fontSize:26, fontWeight:700, color:C.text, margin:"0 0 4px" }}><span style={{ color:C.main }}>A님</span>의 1인 예산 범위는요?</h2>
-        <p style={{ fontSize:13, color:C.textMuted, margin:"0 0 24px" }}>슬라이더 조정 또는 직접 입력하세요</p>
+        <p style={{ fontSize:13, color:C.textMuted, margin:"0 0 6px" }}>슬라이더 조정 또는 직접 입력하세요</p>
+        <p style={{ fontSize:12, color:C.textMuted, margin:"0 0 20px", background:C.inputBg, padding:"8px 12px", borderRadius:8 }}>
+          💡 선택하지 않으면 기본값 <strong style={{ color:C.text }}>10만원</strong>으로 코스가 생성돼요
+        </p>
         <div style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:20, padding:"20px 20px 24px", marginBottom:24, boxShadow:"0 2px 12px #B8A9D912" }}>
           <BudgetSlider minIdx={budgetMinA} maxIdx={budgetMaxA} onMinChange={setBudgetMinA} onMaxChange={setBudgetMaxA} color={C.main} label="A님 예산" />
         </div>
@@ -942,7 +918,10 @@ export default function OnboardingPage() {
         <ProgressBar step={4} />
         <div style={{ fontSize:11, color:C.point, marginBottom:10, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600 }}>Step 4 / 4 · B님</div>
         <h2 className="df-step-title" style={{ fontSize:26, fontWeight:700, color:C.text, margin:"0 0 4px" }}><span style={{ color:C.point }}>B님</span>의 1인 예산 범위는요?</h2>
-        <p style={{ fontSize:13, color:C.textMuted, margin:"0 0 24px" }}>슬라이더 조정 또는 직접 입력하세요</p>
+        <p style={{ fontSize:13, color:C.textMuted, margin:"0 0 6px" }}>슬라이더 조정 또는 직접 입력하세요</p>
+        <p style={{ fontSize:12, color:C.textMuted, margin:"0 0 20px", background:C.inputBg, padding:"8px 12px", borderRadius:8 }}>
+          💡 선택하지 않으면 기본값 <strong style={{ color:C.text }}>10만원</strong>으로 코스가 생성돼요
+        </p>
         <div style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:20, padding:"20px 20px 24px", marginBottom:20, boxShadow:"0 2px 12px #B8A9D912" }}>
           <BudgetSlider minIdx={budgetMinB} maxIdx={budgetMaxB} onMinChange={setBudgetMinB} onMaxChange={setBudgetMaxB} color={C.point} label="B님 예산" />
         </div>
