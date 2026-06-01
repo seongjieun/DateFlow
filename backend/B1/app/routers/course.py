@@ -192,9 +192,7 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
                                 lon = float(d["documents"][0]["x"])
                     except Exception as e:
                         print(f">>> 좌표 조회 실패: {e}")
-                            
-                    except Exception:
-                        pass
+                       
                 ai_places.append(PlaceItem(
                     name=event.get("name", ""),
                     category=event.get("category", "기타"),
@@ -290,19 +288,51 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
             place_list[i].car_minutes_to_next = car_min
         title = f"{mood} 코스 ({weather['description']})"
 
-    course = CourseItem(
-        title=title,
+    # A안 코스
+    course_a = CourseItem(
+        title=f"차분한 감성 코스 ({weather['description']})",
         total_price=budget,
         places=place_list,
     )
 
+    # B안 코스 (카페→바→레스토랑 순서 변경)
+    cafe_budget2 = int(budget * 0.15)
+    dinner_budget2 = int(budget * 0.50)
+    bar_budget2 = int(budget * 0.35)
+    cafes2 = await fetch_places("카페", req.region)
+    bars2 = await fetch_places("바/펍", req.region)
+    restaurants2 = await fetch_places("레스토랑", req.region)
+
+    cafe_data2 = cafes2[1] if len(cafes2) > 1 else cafes2[0] if cafes2 else None
+    bar_data2 = bars2[0] if bars2 else None
+    restaurant_data2 = restaurants2[1] if len(restaurants2) > 1 else restaurants2[0] if restaurants2 else None
+
+    place_list2 = [
+        await make_place(cafe_data2, f"{req.region} 카페", "카페", "13:00", cafe_budget2),
+        await make_place(bar_data2, f"{req.region} 바", "바", "17:00", bar_budget2),
+        await make_place(restaurant_data2, f"{req.region} 레스토랑", "식당", "20:00", dinner_budget2),
+    ]
+    for i in range(len(place_list2) - 1):
+        car_min2, walk_min2 = await calc_transport_minutes(
+            place_list2[i].latitude, place_list2[i].longitude,
+            place_list2[i+1].latitude, place_list2[i+1].longitude,
+        )
+        place_list2[i].walk_minutes_to_next = walk_min2
+        place_list2[i].car_minutes_to_next = car_min2
+
+    course_b = CourseItem(
+        title=f"액티브 핫플 코스 ({weather['description']})",
+        total_price=budget,
+        places=place_list2,
+    )
+
     return CourseResponse(
-    course_id=str(uuid.uuid4()),
-    user_id=req.user_id,
-    region=req.region,
-    budget_max=budget,  
-    courses=[course],
-)
+        course_id=str(uuid.uuid4()),
+        user_id=req.user_id,
+        region=req.region,
+        budget_max=budget,
+        courses=[course_a, course_b],
+    )
 
 @router.get("/{course_id}")
 def get_course(course_id: str):
