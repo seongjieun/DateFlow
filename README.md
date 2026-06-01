@@ -2,7 +2,15 @@
 
 **환경 변수**
 
-**capstone-backend/.env**
+**frontend/f2/.env**
+
+```
+VITE_API_URL=http://localhost:8000
+
+VITE_KAKAO_MAPS_API_KEY=발급받은키
+```
+
+**backend/B1/.env**
 
 ```
 DATABASE_URL=sqlite:///./dateflow.db
@@ -15,15 +23,6 @@ KAKAO_REST_API_KEY=발급받은키
 
 GOOGLE_API_KEY=발급받은키
 ```
-
-**frontend/f2/.env**
-
-```
-VITE_API_URL=http://localhost:8000
-
-VITE_KAKAO_MAPS_API_KEY=발급받은키
-```
-
 **backend/B2/.env**
 
 ```
@@ -38,23 +37,19 @@ KAKAO_REST_API_KEY=발급받은키
 
 백엔드 (B1)
 
-- ```auth_router.py``` (신규) — 회원가입/로그인/JWT 발급
-
-- ```course_schema.py``` (수정) — ```budget_min/max```, ```date```, ```temp``` 필드 추가, ```CourseResponse```에 ```budget_max``` 추가
-- ```course_router.py``` (수정) — ```budget_max``` 통일, AI 장소 카카오 좌표 조회 추가
-
+- ```course_router.py``` (수정) — 카카오 모빌리티 API로 실제 이동시간(도보/자동차) 계산, 좌표 없는 장소 카카오 키워드 검색으로 자동 좌표 조회, A안/B안 두 가지 코스 생성
+- ```course_schema.py```  (수정) — ```car_minutes_to_next``` 필드 추가
   
 프론트엔드 (f2)
 
-- ```AuthContext.tsx``` (신규) — JWT 세션 전역 관리
-- ```LoginPage.tsx``` (신규) — 로그인/회원가입 UI
-- ```App.tsx``` (수정) — ```/login``` 라우트 추가, AuthProvider 적용
-- ```OnboardingPage.tsx``` (수정) — JWT 포함 POST + ```state```로 결과 전달
-- ```CourseResultPage.tsx``` (수정) — ```location.state``` 우선 읽기, URL 파라미터 fallback 유지
+- ```CourseResultPage.tsx``` (수정) — A안/B안 탭 백엔드 연동, 이동시간(```walk_minutes_to_next```, ```car_minutes_to_next```) 표시
+- ```CourseSelectPage.tsx``` (수정) — 목업 → 백엔드 실제 데이터 연동
+- ```BookingPage.tsx``` (수정) — 목업 → 백엔드 실제 데이터 연동
+- ```CompletePage.tsx``` (수정) — 목업 → 백엔드 실제 데이터 연동
+- ```types/course.ts``` (수정) — ```BackendPlace``` 타입 추가, ```car_minutes_to_next``` 필드 추가
 
 ❌ 미완료
 
 - ```user_pref_router.py``` — 취향 저장/조회 API
 - ```PreferencesPage.tsx``` — 취향 입력 페이지
 - 딥에이전트 AI 연동 (현재 Gemini 폴백으로 동작 중)
-- 로그인 후 취향 유무 판단 → ```/preferences``` or ```/onboarding``` 분기 처리
