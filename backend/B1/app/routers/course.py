@@ -176,19 +176,23 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
                 # 카카오 place_id에서 좌표 조회
                 lat, lon = None, None
                 place_id = event.get("place_id", "")
+                print(f">>> place_id: {place_id}, event keys: {list(event.keys())}")
                 if place_id.startswith("kakao:"):
                     kakao_id = place_id.replace("kakao:", "")
                     try:
                         async with httpx.AsyncClient(timeout=5.0) as client:
                             r = await client.get(
-                                f"https://dapi.kakao.com/v2/local/place/id.json",
-                                params={"id": kakao_id},
+                                "https://dapi.kakao.com/v2/local/search/keyword.json",
+                                params={"query": event.get("name", ""), "size": 1},
                                 headers={"Authorization": f"KakaoAK {KAKAO_KEY}"}
                             )
                             d = r.json()
                             if d.get("documents"):
                                 lat = float(d["documents"][0]["y"])
                                 lon = float(d["documents"][0]["x"])
+                    except Exception as e:
+                        print(f">>> 좌표 조회 실패: {e}")
+                            
                     except Exception:
                         pass
                 ai_places.append(PlaceItem(
@@ -252,8 +256,8 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
                         if result.get("documents"):
                             doc = result["documents"][0]
                             lat = float(doc["y"])
-                            print(f">>> 좌표 조회 성공: {name} → {lat}, {lon}")
                             lon = float(doc["x"])
+                            print(f">>> 좌표 조회 성공: {name} → {lat}, {lon}")
                 except:
                     print(f">>> 좌표 조회 실패: {name}")
                     pass
