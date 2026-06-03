@@ -87,11 +87,7 @@ export default function LoginPage() {
       }
 
       login({ ...data, token: data.access_token });
-      if (mode === "register") {
-        navigate("/onboarding");
-      } else {
-        navigate("/");  // SmartHome이 취향 유무 판단
-      }
+      navigate("/");
     } catch {
       setError("서버에 연결할 수 없습니다.");
     } finally {
